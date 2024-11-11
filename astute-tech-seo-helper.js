@@ -1,50 +1,55 @@
-function showTab(event, tabId) {
-    event.preventDefault();
-    document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
-    document.getElementById(tabId).style.display = 'block';
-    document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('nav-tab-active'));
-    event.target.classList.add('nav-tab-active');
-}
-
 jQuery(document).ready(function($) {
-    // Handle post type selection
-    $('#post_type_select').change(function() {
-        const postType = $(this).val();
-        if (!postType) {
-            $('#post_type_table').html('');
-            return;
-        }
+    // Tab switching logic
+    function showTab(event, tabId) {
+        event.preventDefault();
+        $('.tab-content').hide(); // Hide all tab content
+        $('#' + tabId).show();     // Show the selected tab content
+        $('.nav-tab').removeClass('nav-tab-active'); // Remove active class from all tabs
+        $(event.target).addClass('nav-tab-active');  // Add active class to the clicked tab
+    }
 
-        $.ajax({
-            url: astuteTechSEOHelper.ajax_url,
-            method: 'POST',
-            data: {
-                action: 'astute_get_posts_by_type',
-                nonce: astuteTechSEOHelper.nonce,
-                post_type: postType
-            },
-            success: function(response) {
-                if (response.success) {
-                    let tableHtml = '<table class="wp-list-table widefat fixed striped">';
-                    tableHtml += '<thead><tr><th>ID</th><th>Title</th><th>URL</th></tr></thead><tbody>';
+    // Initial display setup: show the first tab by default
+    $('#bulk-alt').show();
 
-                    response.data.forEach(function(post) {
-                        tableHtml += '<tr>';
-                        tableHtml += '<td>' + post.ID + '</td>';
-                        tableHtml += '<td>' + post.title + '</td>';
-                        tableHtml += '<td><a href="' + post.url + '" target="_blank">' + post.url + '</a></td>';
-                        tableHtml += '</tr>';
-                    });
+    // Calculate length of new description in real-time
+    $(document).on('input', '.new-description', function() {
+        const postId = $(this).data('post-id');
+        const newDescription = $(this).val();
+        const newDescriptionLength = newDescription.length;
+        
+        // Update the length display
+        $(`.new-description-length[data-post-id="${postId}"]`).text(newDescriptionLength);
+    });
 
-                    tableHtml += '</tbody></table>';
-                    $('#post_type_table').html(tableHtml);
-                } else {
-                    $('#post_type_table').html('<p>No posts found.</p>');
-                }
-            },
-            error: function() {
-                $('#post_type_table').html('<p>An error occurred while fetching posts.</p>');
+    // Handle save button click
+    $('#description-save').on('click', function() {
+        const descriptions = {};
+
+        // Gather new descriptions from input fields
+        $('.new-description').each(function() {
+            const postId = $(this).data('post-id');
+            const newDescription = $(this).val();
+            if (newDescription) {
+                descriptions[postId] = newDescription;
             }
         });
+
+        // Send descriptions via AJAX
+        $.post(astuteTechSEOHelper.ajax_url, {
+            action: 'save_new_descriptions',
+            nonce: astuteTechSEOHelper.nonce,
+            descriptions: descriptions
+        }, function(response) {
+            if (response.success) {
+                alert('Descriptions updated successfully!');
+            } else {
+                alert('There was an error saving descriptions.');
+            }
+        });
+    });
+
+    // Attach the showTab function to all nav-tab links
+    $('.nav-tab').on('click', function(event) {
+        showTab(event, $(this).attr('href').substring(1));
     });
 });
