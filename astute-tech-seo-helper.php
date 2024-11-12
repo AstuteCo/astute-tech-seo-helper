@@ -278,15 +278,20 @@ function astute_tech_seo_helper_search_content() {
         $results = $wpdb->get_results($wpdb->prepare($query, $search_like, $search_like, $search_like, $search_like));
         
         if ($results) {
+            // Count the number of rows
+            $total_rows = count($results);
+
+            // Output the table with the additional Post Title column
             echo '<table class="wp-list-table widefat fixed striped">';
-            echo '<thead><tr><th>ID</th><th>Post Type</th><th>In-Context Preview</th></tr></thead><tbody>';
+            echo '<thead><tr><th>ID</th><th>Post Type</th><th>Post Title</th><th>In-Context Preview</th></tr></thead><tbody>';
             
             foreach ($results as $result) {
                 $post_id = $result->ID;
                 $post_type = $result->post_type;
+                $post_title = $result->post_title;
                 
                 // Search for the term within title, content, excerpt, or custom fields
-                $content_sources = [$result->post_title, $result->post_content, $result->post_excerpt, $result->custom_field];
+                $content_sources = [$post_title, $result->post_content, $result->post_excerpt, $result->custom_field];
                 $context_snippet = '';
 
                 foreach ($content_sources as $content) {
@@ -303,17 +308,23 @@ function astute_tech_seo_helper_search_content() {
                 echo '<tr>';
                 echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
                 echo '<td>' . esc_html($post_type) . '</td>';
+                echo '<td>' . esc_html($post_title) . '</td>';
                 echo '<td>' . $context_snippet . '</td>';
                 echo '</tr>';
             }
             
             echo '</tbody></table>';
+
+            // Display the total row count below the table
+            echo '<p><strong>Total Rows:</strong> ' . esc_html($total_rows) . '</p>';
         } else {
             echo '<p>No results found for "<strong>' . esc_html($search_terms) . '</strong>".</p>';
         }
     }
     echo '</div>';
 }
+
+
 
 
 // AJAX handler to save new descriptions
@@ -436,22 +447,27 @@ function astute_tech_seo_helper_search_content_ajax() {
         GROUP BY p.ID
     ";
 
-
     $results = $wpdb->get_results($wpdb->prepare($query, $search_like, $search_like, $search_like, $search_like));
-
+    
     if ($results) {
         ob_start();
+        
+        // Count total rows
+        $total_rows = count($results);
+
+        // Output table with Post Title column
         echo '<table class="wp-list-table widefat fixed striped">';
-        echo '<thead><tr><th>ID</th><th>Post Type</th><th>In-Context Preview</th></tr></thead><tbody>';
+        echo '<thead><tr><th>ID</th><th>Post Type</th><th>Post Title</th><th>In-Context Preview</th></tr></thead><tbody>';
 
         foreach ($results as $result) {
             $post_id = $result->ID;
             $post_type = $result->post_type;
+            $post_title = $result->post_title;
 
             // Search for the term within title, content, excerpt, or custom fields
-            $content_sources = [$result->post_title, $result->post_content, $result->post_excerpt, $result->custom_field];
+            $content_sources = [$post_title, $result->post_content, $result->post_excerpt, $result->custom_field];
             $context_snippet = '';
-            
+
             foreach ($content_sources as $content) {
                 if (stripos($content, $search_terms) !== false) {
                     // Locate the first occurrence of the search term
@@ -471,11 +487,14 @@ function astute_tech_seo_helper_search_content_ajax() {
             echo '<tr>';
             echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
             echo '<td>' . esc_html($post_type) . '</td>';
+            echo '<td>' . esc_html($post_title) . '</td>';
             echo '<td>' . $context_snippet . '</td>';
             echo '</tr>';
         }
 
         echo '</tbody></table>';
+        echo '<p><strong>Total Rows:</strong> ' . esc_html($total_rows) . '</p>'; // Display total row count
+        
         $output = ob_get_clean();
     } else {
         $output = '<p>No results found for "<strong>' . esc_html($search_terms) . '</strong>".</p>';
