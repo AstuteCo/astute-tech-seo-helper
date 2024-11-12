@@ -71,16 +71,38 @@ function astute_tech_seo_helper_bulk_alt_updater() {
     <?php
 }
 
+// AJAX handler to save alt text updates
+add_action('wp_ajax_bulk_alt_updater_save_alt_text', 'bulk_alt_updater_save_alt_text');
+function bulk_alt_updater_save_alt_text() {
+    check_ajax_referer('astute_tech_seo_helper_nonce', 'nonce');
+
+    if (!current_user_can('manage_options') || !isset($_POST['alt_text'])) {
+        wp_send_json_error('Invalid request');
+        return;
+    }
+
+    foreach ($_POST['alt_text'] as $image_id => $alt_text) {
+        update_post_meta($image_id, '_wp_attachment_image_alt', sanitize_text_field($alt_text));
+    }
+
+    wp_send_json_success('Alt text updated successfully.');
+}
+
+
 // Tab: Description Length Checker
 function astute_tech_seo_helper_description_length_checker() {
     $description_field = '';
+    $focus_keyword_field = '';
     $is_yoast = defined('WPSEO_VERSION');
     $is_rank_math = defined('RANK_MATH_VERSION');
 
+    // Define the meta fields for description and focus keyword based on the SEO plugin
     if ($is_yoast) {
         $description_field = '_yoast_wpseo_metadesc';
+        $focus_keyword_field = '_yoast_wpseo_focuskw';
     } elseif ($is_rank_math) {
         $description_field = 'rank_math_description';
+        $focus_keyword_field = 'rank_math_focus_keyword';
     }
 
     if (!$description_field) {
@@ -89,7 +111,7 @@ function astute_tech_seo_helper_description_length_checker() {
     }
 
     // Define post types to exclude from the query
-    $excluded_post_types = ['awards']; // Add post types to exclude here
+    $excluded_post_types = ['awards', 'video'];
     $all_post_types = array_merge(['post', 'page'], get_post_types(['public' => true, '_builtin' => false]));
 
     // Filter out excluded post types
@@ -98,7 +120,7 @@ function astute_tech_seo_helper_description_length_checker() {
     // Query for posts with meta descriptions, ordered by ID
     $args = array(
         'post_type'      => $post_types,
-        'post_status'    => 'any',
+        'post_status'    => 'publish',
         'posts_per_page' => -1,
         'orderby'        => 'ID', // Sort by ID
         'order'          => 'ASC'
@@ -107,20 +129,28 @@ function astute_tech_seo_helper_description_length_checker() {
     $query = new WP_Query($args);
 
     echo '<table class="wp-list-table widefat fixed striped">';
-    echo '<thead><tr><th>ID</th><th>Description</th><th>Description Length</th><th>New Description</th><th>New Description Length</th></tr></thead><tbody>';
+    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Title</th><th>Focus Keyword</th><th>Description</th><th>Description Length</th><th>New Description</th><th>New Description Length</th></tr></thead><tbody>';
 
     while ($query->have_posts()) {
         $query->the_post();
         $post_id = get_the_ID();
+        $title = get_the_title($post_id);
+        $post_type = get_post_type($post_id);
 
         // Retrieve the current meta description
         $current_description = get_post_meta($post_id, $description_field, true);
         $current_description_length = strlen($current_description);
 
+        // Retrieve the focus keyword
+        $focus_keyword = get_post_meta($post_id, $focus_keyword_field, true);
+
         // Only display rows for descriptions that fall outside the ideal length range
         if ($current_description_length < 120 || $current_description_length > 160) {
             echo '<tr>';
             echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
+            echo '<td>' . esc_html($post_type) . '</td>';
+            echo '<td>' . esc_html($title) . '</td>';
+            echo '<td>' . esc_html($focus_keyword) . '</td>';
             echo '<td>' . esc_html($current_description) . '</td>';
             echo '<td>' . esc_html($current_description_length) . '</td>';
             echo '<td><input type="text" class="new-description" name="new_description[' . esc_attr($post_id) . ']" data-post-id="' . esc_attr($post_id) . '" placeholder="Enter new description" /></td>';

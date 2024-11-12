@@ -11,7 +11,12 @@ jQuery(document).ready(function($) {
     // Initial display setup: show the first tab by default
     $('#bulk-alt').show();
 
-    // Calculate length of new description in real-time
+    // Attach the showTab function to all nav-tab links
+    $('.nav-tab').on('click', function(event) {
+        showTab(event, $(this).attr('href').substring(1));
+    });
+
+    // Real-time length calculation for new descriptions
     $(document).on('input', '.new-description', function() {
         const postId = $(this).data('post-id');
         const newDescription = $(this).val();
@@ -21,7 +26,7 @@ jQuery(document).ready(function($) {
         $(`.new-description-length[data-post-id="${postId}"]`).text(newDescriptionLength);
     });
 
-    // Handle save button click
+    // Handle description save button click
     $('#description-save').on('click', function() {
         const descriptions = {};
 
@@ -48,13 +53,32 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // Attach the showTab function to all nav-tab links
-    $('.nav-tab').on('click', function(event) {
-        showTab(event, $(this).attr('href').substring(1));
-    });
-});
+    // Handle alt text save button click
+    $('#bulk-alt-save').on('click', function() {
+        let altTexts = {};
 
-jQuery(document).ready(function($) {
+        // Gather alt text inputs
+        $('input[name^="alt_text"]').each(function() {
+            const imageId = $(this).attr('name').match(/\d+/)[0];
+            const altText = $(this).val();
+            altTexts[imageId] = altText;
+        });
+
+        // Send AJAX request to save alt text
+        $.post(astuteTechSEOHelper.ajax_url, {
+            action: 'bulk_alt_updater_save_alt_text',
+            nonce: astuteTechSEOHelper.nonce,
+            alt_text: altTexts
+        }, function(response) {
+            if (response.success) {
+                alert('Alt text updated successfully!');
+            } else {
+                alert('There was an error saving alt text.');
+            }
+        });
+    });
+
+    // AJAX Search Content Form Submission
     $('#search-content-form').on('submit', function(e) {
         e.preventDefault(); // Prevent the default form submission
 
