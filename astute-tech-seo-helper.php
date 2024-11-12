@@ -143,16 +143,16 @@ function astute_tech_seo_helper_title_checker() {
     }
 
     // Define the post type to exclude
-    $excluded_post_types = ['awards'];
+    $excluded_post_types = ['awards', 'video'];
     $all_post_types = array_merge(['post', 'page'], get_post_types(['public' => true, '_builtin' => false]));
 
     // Filter out the excluded post type
     $post_types = array_diff($all_post_types, $excluded_post_types);
 
-    // Query for posts, ordered by ID
+    // Query for published posts only, ordered by ID
     $args = array(
         'post_type'      => $post_types,
-        'post_status'    => 'any',
+        'post_status'    => 'publish', // Include only published posts
         'posts_per_page' => -1,
         'orderby'        => 'ID',
         'order'          => 'ASC'
@@ -161,31 +161,45 @@ function astute_tech_seo_helper_title_checker() {
     $query = new WP_Query($args);
 
     echo '<table class="wp-list-table widefat fixed striped">';
-    echo '<thead><tr><th>ID</th><th>Rendered SEO Title</th><th>Title Length</th></tr></thead><tbody>';
+    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Rendered SEO Title</th><th>Title Length</th></tr></thead><tbody>';
 
     while ($query->have_posts()) {
         $query->the_post();
         $post_id = get_the_ID();
+        $post_type = get_post_type($post_id); // Retrieve the post type
 
         // Retrieve the raw SEO title template from Yoast metadata
         $raw_title = get_post_meta($post_id, '_yoast_wpseo_title', true);
 
-        // Use wp_title if no Yoast SEO title is set
+        // Default to post title if no custom SEO title is set
         if (empty($raw_title)) {
             $raw_title = get_the_title($post_id);
-        } else {
-            // Use Yoast to replace template variables with actual values
-            $raw_title = WPSEO_Frontend::get_instance()->wpseo_replace_vars($raw_title, get_post($post_id));
         }
 
+        // Define replacements for each custom rule
+        $site_name = get_bloginfo('name');
+        $separator = '|'; // Defined separator as pipe
+        $post_title = get_the_title($post_id);
+
+        // Custom replacements based on specified rules
+        $rendered_title = str_replace(
+            ['%%title%%', '%%page%%', '%%sep%%', '%%sitename%%'],
+            [$post_title, '', $separator, $site_name],
+            $raw_title
+        );
+
+        // Remove any remaining % symbols (if any were missed)
+        $rendered_title = str_replace('%', '', $rendered_title);
+
         // Calculate the length of the rendered title
-        $title_length = strlen($raw_title);
+        $title_length = strlen($rendered_title);
 
         // Only display rows for titles that fall outside the 50-60 character range
         if ($title_length < 50 || $title_length > 60) {
             echo '<tr>';
             echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
-            echo '<td>' . esc_html($raw_title) . '</td>';
+            echo '<td>' . esc_html($post_type) . '</td>'; // Display post type
+            echo '<td>' . esc_html($rendered_title) . '</td>';
             echo '<td>' . esc_html($title_length) . '</td>';
             echo '</tr>';
         }
@@ -195,8 +209,81 @@ function astute_tech_seo_helper_title_checker() {
     echo '</tbody></table>';
 }
 
+// Tab for Search Content
+function astute_tech_seo_helper_search_content() {
+    ?>
+    <div class="wrap">
+        <h2>Search Content</h2>
+        <form method="post" action="">
+            <input type="text" name="search_terms" placeholder="Enter search terms..." required>
+            <label>
+                <input type="checkbox" name="include_drafts" value="1" <?php checked(isset($_POST['include_drafts'])); ?>>
+                Include Drafts
+            </label>
+            <?php submit_button('Search'); ?>
+        </form>
+    <?php
 
+    if (isset($_POST['search_terms']) && !empty($_POST['search_terms'])) {
+        global $wpdb;
+        $search_terms = sanitize_text_field($_POST['search_terms']);
+        $include_drafts = isset($_POST['include_drafts']) ? 'publish, draft' : 'publish';
+        
+        // Query to search in `wp_posts` (title, content, and excerpt) and `wp_postmeta` (ACF and custom fields)
+        $query = "
+            SELECT DISTINCT p.ID, p.post_type, p.post_title, p.post_content, p.post_excerpt, pm.meta_value AS custom_field
+            FROM {$wpdb->posts} p
+            LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+            WHERE (p.post_status IN ($include_drafts)) 
+                AND (p.post_type IN ('post', 'page'))
+                AND (p.post_title LIKE %s 
+                    OR p.post_content LIKE %s 
+                    OR p.post_excerpt LIKE %s 
+                    OR pm.meta_value LIKE %s)
+                AND p.post_type != 'revision'
+        ";
+        
+        // Prepare search term with wildcards for partial matching
+        $search_like = '%' . $wpdb->esc_like($search_terms) . '%';
+        $results = $wpdb->get_results($wpdb->prepare($query, $search_like, $search_like, $search_like, $search_like));
+        
+        if ($results) {
+            echo '<table class="wp-list-table widefat fixed striped">';
+            echo '<thead><tr><th>ID</th><th>Post Type</th><th>In-Context Preview</th></tr></thead><tbody>';
+            
+            foreach ($results as $result) {
+                $post_id = $result->ID;
+                $post_type = $result->post_type;
+                
+                // Search for the term within title, content, excerpt, or custom fields
+                $content_sources = [$result->post_title, $result->post_content, $result->post_excerpt, $result->custom_field];
+                $context_snippet = '';
 
+                foreach ($content_sources as $content) {
+                    if (stripos($content, $search_terms) !== false) {
+                        // Locate the search term and extract surrounding context
+                        $position = stripos($content, $search_terms);
+                        $context_snippet = '... ' . wp_html_excerpt($content, $position - 20, 20) . 
+                                           '<strong>' . substr($content, $position, strlen($search_terms)) . '</strong>' . 
+                                           wp_html_excerpt($content, $position + strlen($search_terms), 20) . ' ...';
+                        break;
+                    }
+                }
+                
+                echo '<tr>';
+                echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
+                echo '<td>' . esc_html($post_type) . '</td>';
+                echo '<td>' . $context_snippet . '</td>';
+                echo '</tr>';
+            }
+            
+            echo '</tbody></table>';
+        } else {
+            echo '<p>No results found for "<strong>' . esc_html($search_terms) . '</strong>".</p>';
+        }
+    }
+    echo '</div>';
+}
 
 
 // AJAX handler to save new descriptions
@@ -222,7 +309,7 @@ function save_new_descriptions() {
     wp_send_json_success('Descriptions updated successfully.');
 }
 
-// Render the admin page with both tabs
+// Render the admin page with all tabs, including the new Search Content tab
 function astute_tech_seo_helper_page() {
     ?>
     <div class="wrap">
@@ -232,7 +319,8 @@ function astute_tech_seo_helper_page() {
         <h2 class="nav-tab-wrapper">
             <a href="#bulk-alt" class="nav-tab nav-tab-active" onclick="showTab(event, 'bulk-alt')">Bulk Alt Text Updater</a>
             <a href="#description-length" class="nav-tab" onclick="showTab(event, 'description-length')">Description Length Checker</a>
-            <!--<a href="#title-checker" class="nav-tab" onclick="showTab(event, 'title-checker')">Title Checker</a>-->
+            <a href="#title-checker" class="nav-tab" onclick="showTab(event, 'title-checker')">Title Checker</a>
+            <a href="#search-content" class="nav-tab" onclick="showTab(event, 'search-content')">Search Content</a>
         </h2>
 
         <!-- Tab Content -->
@@ -250,9 +338,23 @@ function astute_tech_seo_helper_page() {
             <h2>Title Checker</h2>
             <?php astute_tech_seo_helper_title_checker(); ?>
         </div>
+
+        <div id="search-content" class="tab-content" style="display:none;">
+            <h2>Search Content</h2>
+            <form id="search-content-form">
+                <input type="text" id="search-terms" name="search_terms" placeholder="Enter search terms..." required>
+                <label>
+                    <input type="checkbox" id="include-drafts" name="include_drafts" value="1">
+                    Include Drafts
+                </label>
+                <?php submit_button('Search'); ?>
+            </form>
+            <div id="search-results"></div> <!-- Container for AJAX results -->
+        </div>
     </div>
     <?php
 }
+
 
 
 // Enqueue JavaScript for live calculation of new description length and save button functionality
@@ -269,3 +371,87 @@ function astute_tech_seo_helper_scripts($hook) {
     ]);
     wp_enqueue_style('astute-tech-seo-helper-css', plugin_dir_url(__FILE__) . 'style.css');
 }
+
+// Enqueue the AJAX script
+function astute_tech_seo_helper_enqueue_scripts() {
+    if (isset($_GET['page']) && $_GET['page'] === 'astute-tech-seo-helper') {
+        wp_enqueue_script('astute-tech-seo-helper-ajax', plugin_dir_url(__FILE__) . 'js/astute-tech-seo-helper-ajax.js', ['jquery'], null, true);
+    }
+}
+add_action('admin_enqueue_scripts', 'astute_tech_seo_helper_enqueue_scripts');
+
+// AJAX handler for search content
+function astute_tech_seo_helper_search_content_ajax() {
+    check_ajax_referer('astute_tech_seo_helper_nonce', 'nonce');
+
+    global $wpdb;
+    $search_terms = sanitize_text_field($_POST['search_terms']);
+    $include_drafts = $_POST['include_drafts'] ? ['publish', 'draft'] : ['publish'];
+
+    // Prepare the search term for partial matching
+    $search_like = '%' . $wpdb->esc_like($search_terms) . '%';
+
+    // Updated query to search in `wp_posts` and `wp_postmeta`, explicitly excluding revisions
+    $query = "
+        SELECT DISTINCT p.ID, p.post_type, p.post_title, p.post_content, p.post_excerpt, MAX(pm.meta_value) AS custom_field
+        FROM {$wpdb->posts} p
+        LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+        WHERE p.post_status IN ('" . implode("','", $include_drafts) . "') 
+            AND p.post_type IN ('post', 'page')
+            AND (p.post_title LIKE %s 
+                OR p.post_content LIKE %s 
+                OR p.post_excerpt LIKE %s 
+                OR (pm.meta_value LIKE %s AND pm.meta_key IS NOT NULL))
+        AND p.post_type != 'revision'
+        GROUP BY p.ID
+    ";
+
+
+    $results = $wpdb->get_results($wpdb->prepare($query, $search_like, $search_like, $search_like, $search_like));
+
+    if ($results) {
+        ob_start();
+        echo '<table class="wp-list-table widefat fixed striped">';
+        echo '<thead><tr><th>ID</th><th>Post Type</th><th>In-Context Preview</th></tr></thead><tbody>';
+
+        foreach ($results as $result) {
+            $post_id = $result->ID;
+            $post_type = $result->post_type;
+
+            // Search for the term within title, content, excerpt, or custom fields
+            $content_sources = [$result->post_title, $result->post_content, $result->post_excerpt, $result->custom_field];
+            $context_snippet = '';
+            
+            foreach ($content_sources as $content) {
+                if (stripos($content, $search_terms) !== false) {
+                    // Locate the first occurrence of the search term
+                    $position = stripos($content, $search_terms);
+            
+                    // Set the snippet to 30 characters before and 30 characters after the match
+                    $before = substr($content, max(0, $position - 30), 30);
+                    $match = substr($content, $position, strlen($search_terms));  // Matched term in bold
+                    $after = substr($content, $position + strlen($search_terms), 30);
+            
+                    // Concatenate with bold match term and ellipses
+                    $context_snippet = '... ' . esc_html($before) . '<strong>' . esc_html($match) . '</strong>' . esc_html($after) . ' ...';
+                    break;
+                }
+            }
+
+            echo '<tr>';
+            echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
+            echo '<td>' . esc_html($post_type) . '</td>';
+            echo '<td>' . $context_snippet . '</td>';
+            echo '</tr>';
+        }
+
+        echo '</tbody></table>';
+        $output = ob_get_clean();
+    } else {
+        $output = '<p>No results found for "<strong>' . esc_html($search_terms) . '</strong>".</p>';
+    }
+
+    echo $output;
+    wp_die(); // Properly end AJAX request
+}
+add_action('wp_ajax_astute_tech_seo_helper_search_content', 'astute_tech_seo_helper_search_content_ajax');

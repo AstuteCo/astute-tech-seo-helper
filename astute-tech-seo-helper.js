@@ -53,3 +53,29 @@ jQuery(document).ready(function($) {
         showTab(event, $(this).attr('href').substring(1));
     });
 });
+
+jQuery(document).ready(function($) {
+    $('#search-content-form').on('submit', function(e) {
+        e.preventDefault(); // Prevent the default form submission
+
+        const searchTerms = $('#search-terms').val();
+        const includeDrafts = $('#include-drafts').is(':checked') ? 1 : 0;
+
+        $.ajax({
+            url: astuteTechSEOHelper.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'astute_tech_seo_helper_search_content',
+                search_terms: searchTerms,
+                include_drafts: includeDrafts,
+                nonce: astuteTechSEOHelper.nonce
+            },
+            success: function(response) {
+                $('#search-results').html(response); // Display the results
+            },
+            error: function() {
+                $('#search-results').html('<p>There was an error processing the request.</p>');
+            }
+        });
+    });
+});
