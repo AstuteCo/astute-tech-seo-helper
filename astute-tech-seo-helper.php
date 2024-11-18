@@ -54,9 +54,57 @@ function astute_tech_seo_helper_bulk_alt_updater() {
                     $image_url = wp_get_attachment_url($image_id);
                     $image_filename = basename($image_url);
 
+                    if (!$image_url) {
+                        echo '<p>Error retrieving URL for image ID ' . $image_id . '</p>';
+                        continue;
+                    }
+
+                    // Initialize post usage array
+                    $post_ids = [];
+
+                    // Search `post_content` for inline usage
+                    global $wpdb;
+                    $inline_posts = $wpdb->get_col(
+                        $wpdb->prepare(
+                            "SELECT ID FROM {$wpdb->posts} WHERE post_type IN ('post', 'page') AND post_status = 'publish' AND post_content LIKE %s",
+                            '%' . $wpdb->esc_like($image_url) . '%'
+                        )
+                    );
+
+                    if ($inline_posts) {
+                        $post_ids = array_merge($post_ids, $inline_posts);
+                    }
+
+                    // Search `wp_postmeta` for custom field references
+                    $meta_posts = $wpdb->get_col(
+                        $wpdb->prepare(
+                            "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_value = %s",
+                            $image_id
+                        )
+                    );
+
+                    if ($meta_posts) {
+                        $post_ids = array_merge($post_ids, $meta_posts);
+                    }
+
+                    // Remove duplicates
+                    $post_ids = array_unique($post_ids);
+
+                    // Output the image and its usage
                     echo '<div class="bulk-alt-item">';
                     echo '<img src="' . esc_url($image_url) . '" class="thumbnail" data-large="' . esc_url($image_url) . '" />';
-                    echo '<p class="filename">' . esc_html($image_filename) . '</p>';
+                    echo '<p class="filename"><a href="' . esc_url($image_url) . '" target="_blank">' . esc_html($image_filename) . '</a></p>';
+
+                    // Display clickable post IDs where the image is used (before input field)
+                    if (!empty($post_ids)) {
+                        echo '<div class="image-usage">';
+                        echo '<strong>Used in:</strong> ';
+                        foreach ($post_ids as $post_id) {
+                            echo '<a href="' . esc_url(get_permalink($post_id)) . '" target="_blank">Post ' . esc_html($post_id) . '</a>, ';
+                        }
+                        echo '</div>';
+                    }
+
                     echo '<input type="text" name="alt_text[' . $image_id . ']" placeholder="Enter alt text" />';
                     echo '</div>';
                 }
