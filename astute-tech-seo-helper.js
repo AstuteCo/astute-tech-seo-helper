@@ -102,4 +102,74 @@ jQuery(document).ready(function($) {
             }
         });
     });
+
+    // Real-time word count for alt text fields
+    $(document).on('input', '.alt-text-input', function () {
+        const imageId = $(this).attr('id').match(/\d+/)[0];
+        const text = $(this).val();
+        const wordCount = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+
+        // Update the word count display
+        $(`.word-count[data-image-id="${imageId}"]`).text(`(${wordCount} words)`);
+    });
+
+    // Handle alt text save button click
+    $('#bulk-alt-save').on('click', function () {
+        let altTexts = {};
+
+        // Gather alt text inputs
+        $('input[name^="alt_text"]').each(function () {
+            const imageId = $(this).attr('name').match(/\d+/)[0];
+            const altText = $(this).val();
+            altTexts[imageId] = altText;
+        });
+
+        // Send AJAX request to save alt text
+        $.post(astuteTechSEOHelper.ajax_url, {
+            action: 'bulk_alt_updater_save_alt_text',
+            nonce: astuteTechSEOHelper.nonce,
+            alt_text: altTexts
+        }, function (response) {
+            if (response.success) {
+                alert('Alt text updated successfully!');
+            } else {
+                alert('There was an error saving alt text.');
+            }
+        });
+    });
+
+    // Real-time length calculation for SEO titles
+    $(document).on('input', '.update-title', function () {
+        const postId = $(this).data('post-id');
+        const newTitle = $(this).val();
+        const newTitleLength = newTitle.length;
+
+        // Update the length display
+        $(`.update-title-length[data-post-id="${postId}"]`).text(newTitleLength);
+    });
+
+    // Save updated titles
+    $('#save-titles').on('click', function () {
+        const updatedTitles = {};
+
+        // Gather updated titles
+        $('.update-title').each(function () {
+            const postId = $(this).data('post-id');
+            const newTitle = $(this).val();
+            updatedTitles[postId] = newTitle;
+        });
+
+        // Send AJAX request to save titles
+        $.post(astuteTechSEOHelper.ajax_url, {
+            action: 'save_updated_titles',
+            nonce: astuteTechSEOHelper.nonce,
+            titles: updatedTitles
+        }, function (response) {
+            if (response.success) {
+                alert('Titles updated successfully!');
+            } else {
+                alert('There was an error saving titles.');
+            }
+        });
+    });
 });

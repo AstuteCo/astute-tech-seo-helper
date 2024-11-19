@@ -94,8 +94,8 @@ function astute_tech_seo_helper_bulk_alt_updater() {
                     echo '<div class="bulk-alt-item">';
                     echo '<img src="' . esc_url($image_url) . '" class="thumbnail" data-large="' . esc_url($image_url) . '" />';
                     echo '<p class="filename"><a href="' . esc_url($image_url) . '" target="_blank">' . esc_html($image_filename) . '</a></p>';
-
-                    // Display clickable post IDs where the image is used (before input field)
+                    
+                    // Display clickable post IDs where the image is used
                     if (!empty($post_ids)) {
                         echo '<div class="image-usage">';
                         echo '<strong>Used in:</strong> ';
@@ -104,9 +104,12 @@ function astute_tech_seo_helper_bulk_alt_updater() {
                         }
                         echo '</div>';
                     }
-
-                    echo '<input type="text" name="alt_text[' . $image_id . ']" placeholder="Enter alt text" />';
+                    
+                    // Add input field with word count label
+                    echo '<label for="alt_text_' . $image_id . '">Alt Text (Should be ~5-15 words): <span class="word-count" data-image-id="' . $image_id . '">(0 words)</span></label>';
+                    echo '<input type="text" id="alt_text_' . $image_id . '" class="alt-text-input" name="alt_text[' . $image_id . ']" placeholder="Enter alt text" />';
                     echo '</div>';
+                    
                 }
                 wp_reset_postdata();
             } else {
@@ -239,52 +242,40 @@ function astute_tech_seo_helper_title_checker() {
     $query = new WP_Query($args);
 
     echo '<table class="wp-list-table widefat fixed striped">';
-    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Rendered SEO Title</th><th>Title Length</th></tr></thead><tbody>';
+    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Rendered SEO Title</th><th>Title Length</th><th>Update Title</th></tr></thead><tbody>';
 
     while ($query->have_posts()) {
         $query->the_post();
         $post_id = get_the_ID();
-        $post_type = get_post_type($post_id); // Retrieve the post type
+        $post_type = get_post_type($post_id);
 
-        // Retrieve the raw SEO title template from Yoast metadata
+        // Retrieve the raw SEO title template
         $raw_title = get_post_meta($post_id, '_yoast_wpseo_title', true);
-
-        // Default to post title if no custom SEO title is set
         if (empty($raw_title)) {
             $raw_title = get_the_title($post_id);
         }
 
-        // Define replacements for each custom rule
-        $site_name = get_bloginfo('name');
-        $separator = '|'; // Defined separator as pipe
-        $post_title = get_the_title($post_id);
-
-        // Custom replacements based on specified rules
         $rendered_title = str_replace(
             ['%%title%%', '%%page%%', '%%sep%%', '%%sitename%%'],
-            [$post_title, '', $separator, $site_name],
+            [get_the_title($post_id), '', '|', get_bloginfo('name')],
             $raw_title
         );
-
-        // Remove any remaining % symbols (if any were missed)
         $rendered_title = str_replace('%', '', $rendered_title);
-
-        // Calculate the length of the rendered title
         $title_length = strlen($rendered_title);
 
-        // Only display rows for titles that fall outside the 50-60 character range
-        if ($title_length < 50 || $title_length > 60) {
-            echo '<tr>';
-            echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
-            echo '<td>' . esc_html($post_type) . '</td>'; // Display post type
-            echo '<td>' . esc_html($rendered_title) . '</td>';
-            echo '<td>' . esc_html($title_length) . '</td>';
-            echo '</tr>';
-        }
+        echo '<tr>';
+        echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
+        echo '<td>' . esc_html($post_type) . '</td>';
+        echo '<td><input type="text" class="update-title" data-post-id="' . esc_attr($post_id) . '" value="' . esc_attr($rendered_title) . '" /></td>';
+        echo '<td>' . esc_html($title_length) . '</td>';
+        echo '<td><span class="update-title-length" data-post-id="' . esc_attr($post_id) . '">' . esc_html($title_length) . '</span></td>';
+        echo '</tr>';
     }
     wp_reset_postdata();
 
     echo '</tbody></table>';
+    echo '<button type="button" id="save-titles" class="button button-primary">Save Titles</button>';
+
 }
 
 // Tab for Search Content
@@ -372,8 +363,21 @@ function astute_tech_seo_helper_search_content() {
     echo '</div>';
 }
 
+add_action('wp_ajax_save_updated_titles', 'save_updated_titles');
+function save_updated_titles() {
+    check_ajax_referer('astute_tech_seo_helper_nonce', 'nonce');
 
+    if (!current_user_can('manage_options') || !isset($_POST['titles'])) {
+        wp_send_json_error('Invalid request');
+        return;
+    }
 
+    foreach ($_POST['titles'] as $post_id => $new_title) {
+        update_post_meta($post_id, '_yoast_wpseo_title', sanitize_text_field($new_title));
+    }
+
+    wp_send_json_success('Titles updated successfully.');
+}
 
 // AJAX handler to save new descriptions
 add_action('wp_ajax_save_new_descriptions', 'save_new_descriptions');
