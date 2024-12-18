@@ -223,17 +223,15 @@ function astute_tech_seo_helper_title_checker() {
         return;
     }
 
-    // Define the post type to exclude
+    // Define the post types to include/exclude
     $excluded_post_types = ['awards', 'video'];
     $all_post_types = array_merge(['post', 'page'], get_post_types(['public' => true, '_builtin' => false]));
-
-    // Filter out the excluded post type
     $post_types = array_diff($all_post_types, $excluded_post_types);
 
-    // Query for published posts only, ordered by ID
+    // Query for published posts
     $args = array(
         'post_type'      => $post_types,
-        'post_status'    => 'publish', // Include only published posts
+        'post_status'    => 'publish',
         'posts_per_page' => -1,
         'orderby'        => 'ID',
         'order'          => 'ASC'
@@ -255,6 +253,7 @@ function astute_tech_seo_helper_title_checker() {
             $raw_title = get_the_title($post_id);
         }
 
+        // Render the title
         $rendered_title = str_replace(
             ['%%title%%', '%%page%%', '%%sep%%', '%%sitename%%'],
             [get_the_title($post_id), '', '|', get_bloginfo('name')],
@@ -263,19 +262,22 @@ function astute_tech_seo_helper_title_checker() {
         $rendered_title = str_replace('%', '', $rendered_title);
         $title_length = strlen($rendered_title);
 
-        echo '<tr>';
-        echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
-        echo '<td>' . esc_html($post_type) . '</td>';
-        echo '<td><input type="text" class="update-title" data-post-id="' . esc_attr($post_id) . '" value="' . esc_attr($rendered_title) . '" /></td>';
-        echo '<td>' . esc_html($title_length) . '</td>';
-        echo '<td><span class="update-title-length" data-post-id="' . esc_attr($post_id) . '">' . esc_html($title_length) . '</span></td>';
-        echo '</tr>';
+        // **Only display posts where title is below 50 or above 60 characters**
+        if ($title_length < 50 || $title_length > 60) {
+            echo '<tr>';
+            echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
+            echo '<td>' . esc_html($post_type) . '</td>';
+            echo '<td><input type="text" class="update-title" data-post-id="' . esc_attr($post_id) . '" value="' . esc_attr($rendered_title) . '" /></td>';
+            echo '<td>' . esc_html($title_length) . '</td>';
+            echo '<td><span class="update-title-length" data-post-id="' . esc_attr($post_id) . '">' . esc_html($title_length) . '</span></td>';
+            echo '</tr>';
+        }
     }
+
     wp_reset_postdata();
 
     echo '</tbody></table>';
     echo '<button type="button" id="save-titles" class="button button-primary">Save Titles</button>';
-
 }
 
 // Tab for Search Content
