@@ -147,7 +147,6 @@ function astute_tech_seo_helper_description_length_checker() {
     $is_yoast = defined('WPSEO_VERSION');
     $is_rank_math = defined('RANK_MATH_VERSION');
 
-    // Define the meta fields for description and focus keyword based on the SEO plugin
     if ($is_yoast) {
         $description_field = '_yoast_wpseo_metadesc';
         $focus_keyword_field = '_yoast_wpseo_focuskw';
@@ -161,74 +160,10 @@ function astute_tech_seo_helper_description_length_checker() {
         return;
     }
 
-    // Define post types to exclude from the query
-    $excluded_post_types = ['awards', 'video'];
-    $all_post_types = array_merge(['post', 'page'], get_post_types(['public' => true, '_builtin' => false]));
-
-    // Filter out excluded post types
-    $post_types = array_diff($all_post_types, $excluded_post_types);
-
-    // Query for posts with meta descriptions, ordered by ID
-    $args = array(
-        'post_type'      => $post_types,
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'orderby'        => 'ID', // Sort by ID
-        'order'          => 'ASC'
-    );
-
-    $query = new WP_Query($args);
-
-    echo '<table class="wp-list-table widefat fixed striped">';
-    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Title</th><th>Focus Keyword</th><th>Description</th><th>Description Length</th><th>New Description</th><th>New Description Length</th></tr></thead><tbody>';
-
-    while ($query->have_posts()) {
-        $query->the_post();
-        $post_id = get_the_ID();
-        $title = get_the_title($post_id);
-        $post_type = get_post_type($post_id);
-
-        // Retrieve the current meta description
-        $current_description = get_post_meta($post_id, $description_field, true);
-        $current_description_length = strlen($current_description);
-
-        // Retrieve the focus keyword
-        $focus_keyword = get_post_meta($post_id, $focus_keyword_field, true);
-
-        // Only display rows for descriptions that fall outside the ideal length range
-        if ($current_description_length < 120 || $current_description_length > 160) {
-            echo '<tr>';
-            echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
-            echo '<td>' . esc_html($post_type) . '</td>';
-            echo '<td>' . esc_html($title) . '</td>';
-            echo '<td>' . esc_html($focus_keyword) . '</td>';
-            echo '<td>' . esc_html($current_description) . '</td>';
-            echo '<td>' . esc_html($current_description_length) . '</td>';
-            echo '<td><input type="text" class="new-description" name="new_description[' . esc_attr($post_id) . ']" data-post-id="' . esc_attr($post_id) . '" placeholder="Enter new description" /></td>';
-            echo '<td><span class="new-description-length" data-post-id="' . esc_attr($post_id) . '">0</span></td>';
-            echo '</tr>';
-        }
-    }
-    wp_reset_postdata();
-
-    echo '</tbody></table>';
-    echo '<button type="button" id="description-save" class="button button-primary">Save Descriptions</button>';
-}
-
-// Tab for Titles
-function astute_tech_seo_helper_title_checker() {
-    // Ensure Yoast SEO is available
-    if (!defined('WPSEO_VERSION') || !class_exists('WPSEO_Frontend')) {
-        echo '<p>Yoast SEO is required for this feature.</p>';
-        return;
-    }
-
-    // Define the post types to include/exclude
     $excluded_post_types = ['awards', 'video'];
     $all_post_types = array_merge(['post', 'page'], get_post_types(['public' => true, '_builtin' => false]));
     $post_types = array_diff($all_post_types, $excluded_post_types);
 
-    // Query for published posts
     $args = array(
         'post_type'      => $post_types,
         'post_status'    => 'publish',
@@ -240,20 +175,86 @@ function astute_tech_seo_helper_title_checker() {
     $query = new WP_Query($args);
 
     echo '<table class="wp-list-table widefat fixed striped">';
-    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Rendered SEO Title</th><th>Title Length</th><th>Update Title</th></tr></thead><tbody>';
+    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Title</th><th>Focus Keyword</th><th>Description</th><th>Description Length</th><th>New Description</th><th>New Description Length</th><th>Index Status</th></tr></thead><tbody>';
+
+    while ($query->have_posts()) {
+        $query->the_post();
+        $post_id = get_the_ID();
+        $title = get_the_title($post_id);
+        $post_type = get_post_type($post_id);
+
+        $current_description = get_post_meta($post_id, $description_field, true);
+        $current_description_length = strlen($current_description);
+        $focus_keyword = get_post_meta($post_id, $focus_keyword_field, true);
+
+        // Get indexing status
+        $index_status = 'Indexed';
+        if ($is_yoast) {
+            $robots = get_post_meta($post_id, '_yoast_wpseo_meta-robots-noindex', true);
+            if ($robots === '1') {
+                $index_status = 'No-Index';
+            }
+        } elseif ($is_rank_math) {
+            $robots = get_post_meta($post_id, 'rank_math_robots', true);
+            if (is_array($robots) && in_array('noindex', $robots)) {
+                $index_status = 'No-Index';
+            }
+        }
+
+        if ($current_description_length < 120 || $current_description_length > 160) {
+            echo '<tr>';
+            echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
+            echo '<td>' . esc_html($post_type) . '</td>';
+            echo '<td>' . esc_html($title) . '</td>';
+            echo '<td>' . esc_html($focus_keyword) . '</td>';
+            echo '<td>' . esc_html($current_description) . '</td>';
+            echo '<td>' . esc_html($current_description_length) . '</td>';
+            echo '<td><input type="text" class="new-description" name="new_description[' . esc_attr($post_id) . ']" data-post-id="' . esc_attr($post_id) . '" placeholder="Enter new description" /></td>';
+            echo '<td><span class="new-description-length" data-post-id="' . esc_attr($post_id) . '">0</span></td>';
+            echo '<td>' . esc_html($index_status) . '</td>';
+            echo '</tr>';
+        }
+    }
+    wp_reset_postdata();
+
+    echo '</tbody></table>';
+    echo '<button type="button" id="description-save" class="button button-primary">Save Descriptions</button>';
+}
+
+// Tab for Titles
+function astute_tech_seo_helper_title_checker() {
+    if (!defined('WPSEO_VERSION') || !class_exists('WPSEO_Frontend')) {
+        echo '<p>Yoast SEO is required for this feature.</p>';
+        return;
+    }
+
+    $excluded_post_types = ['awards', 'video'];
+    $all_post_types = array_merge(['post', 'page'], get_post_types(['public' => true, '_builtin' => false]));
+    $post_types = array_diff($all_post_types, $excluded_post_types);
+
+    $args = array(
+        'post_type'      => $post_types,
+        'post_status'    => 'publish',
+        'posts_per_page' => -1,
+        'orderby'        => 'ID',
+        'order'          => 'ASC'
+    );
+
+    $query = new WP_Query($args);
+
+    echo '<table class="wp-list-table widefat fixed striped">';
+    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Rendered SEO Title</th><th>Title Length</th><th>Update Title</th><th>Index Status</th></tr></thead><tbody>';
 
     while ($query->have_posts()) {
         $query->the_post();
         $post_id = get_the_ID();
         $post_type = get_post_type($post_id);
 
-        // Retrieve the raw SEO title template
         $raw_title = get_post_meta($post_id, '_yoast_wpseo_title', true);
         if (empty($raw_title)) {
             $raw_title = get_the_title($post_id);
         }
 
-        // Render the title
         $rendered_title = str_replace(
             ['%%title%%', '%%page%%', '%%sep%%', '%%sitename%%'],
             [get_the_title($post_id), '', '|', get_bloginfo('name')],
@@ -262,7 +263,10 @@ function astute_tech_seo_helper_title_checker() {
         $rendered_title = str_replace('%', '', $rendered_title);
         $title_length = strlen($rendered_title);
 
-        // **Only display posts where title is below 50 or above 60 characters**
+        // Get indexing status
+        $robots = get_post_meta($post_id, '_yoast_wpseo_meta-robots-noindex', true);
+        $index_status = ($robots === '1') ? 'No-Index' : 'Indexed';
+
         if ($title_length < 50 || $title_length > 60) {
             echo '<tr>';
             echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
@@ -270,6 +274,7 @@ function astute_tech_seo_helper_title_checker() {
             echo '<td><input type="text" class="update-title" data-post-id="' . esc_attr($post_id) . '" value="' . esc_attr($rendered_title) . '" /></td>';
             echo '<td>' . esc_html($title_length) . '</td>';
             echo '<td><span class="update-title-length" data-post-id="' . esc_attr($post_id) . '">' . esc_html($title_length) . '</span></td>';
+            echo '<td>' . esc_html($index_status) . '</td>';
             echo '</tr>';
         }
     }
