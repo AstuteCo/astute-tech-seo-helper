@@ -164,18 +164,50 @@ function astute_tech_seo_helper_description_length_checker() {
     $all_post_types = array_merge(['post', 'page'], get_post_types(['public' => true, '_builtin' => false]));
     $post_types = array_diff($all_post_types, $excluded_post_types);
 
+    $meta_query = array('relation' => 'AND');
+    
+    // Add noindex filtering based on SEO plugin
+    if ($is_yoast) {
+        $meta_query[] = array(
+            'relation' => 'OR',
+            array(
+                'key' => '_yoast_wpseo_meta-robots-noindex',
+                'compare' => 'NOT EXISTS'
+            ),
+            array(
+                'key' => '_yoast_wpseo_meta-robots-noindex',
+                'value' => '1',
+                'compare' => '!='
+            )
+        );
+    } elseif ($is_rank_math) {
+        $meta_query[] = array(
+            'relation' => 'OR',
+            array(
+                'key' => 'rank_math_robots',
+                'compare' => 'NOT EXISTS'
+            ),
+            array(
+                'key' => 'rank_math_robots',
+                'value' => 'noindex',
+                'compare' => 'NOT LIKE'
+            )
+        );
+    }
+
     $args = array(
         'post_type'      => $post_types,
         'post_status'    => 'publish',
         'posts_per_page' => -1,
         'orderby'        => 'ID',
-        'order'          => 'ASC'
+        'order'          => 'ASC',
+        'meta_query'     => $meta_query
     );
 
     $query = new WP_Query($args);
 
     echo '<table class="wp-list-table widefat fixed striped">';
-    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Title</th><th>Focus Keyword</th><th>Description</th><th>Description Length</th><th>New Description</th><th>New Description Length</th><th>Index Status</th></tr></thead><tbody>';
+    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Title</th><th>Focus Keyword</th><th>Description</th><th>Description Length</th><th>New Description</th><th>New Description Length</th></tr></thead><tbody>';
 
     while ($query->have_posts()) {
         $query->the_post();
@@ -187,20 +219,6 @@ function astute_tech_seo_helper_description_length_checker() {
         $current_description_length = strlen($current_description);
         $focus_keyword = get_post_meta($post_id, $focus_keyword_field, true);
 
-        // Get indexing status
-        $index_status = 'Indexed';
-        if ($is_yoast) {
-            $robots = get_post_meta($post_id, '_yoast_wpseo_meta-robots-noindex', true);
-            if ($robots === '1') {
-                $index_status = 'No-Index';
-            }
-        } elseif ($is_rank_math) {
-            $robots = get_post_meta($post_id, 'rank_math_robots', true);
-            if (is_array($robots) && in_array('noindex', $robots)) {
-                $index_status = 'No-Index';
-            }
-        }
-
         if ($current_description_length < 120 || $current_description_length > 160) {
             echo '<tr>';
             echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
@@ -211,7 +229,6 @@ function astute_tech_seo_helper_description_length_checker() {
             echo '<td>' . esc_html($current_description_length) . '</td>';
             echo '<td><input type="text" class="new-description" name="new_description[' . esc_attr($post_id) . ']" data-post-id="' . esc_attr($post_id) . '" placeholder="Enter new description" /></td>';
             echo '<td><span class="new-description-length" data-post-id="' . esc_attr($post_id) . '">0</span></td>';
-            echo '<td>' . esc_html($index_status) . '</td>';
             echo '</tr>';
         }
     }
@@ -220,7 +237,6 @@ function astute_tech_seo_helper_description_length_checker() {
     echo '</tbody></table>';
     echo '<button type="button" id="description-save" class="button button-primary">Save Descriptions</button>';
 }
-
 // Tab for Titles
 function astute_tech_seo_helper_title_checker() {
     if (!defined('WPSEO_VERSION') || !class_exists('WPSEO_Frontend')) {
@@ -237,13 +253,25 @@ function astute_tech_seo_helper_title_checker() {
         'post_status'    => 'publish',
         'posts_per_page' => -1,
         'orderby'        => 'ID',
-        'order'          => 'ASC'
+        'order'          => 'ASC',
+        'meta_query'     => array(
+            'relation' => 'OR',
+            array(
+                'key' => '_yoast_wpseo_meta-robots-noindex',
+                'compare' => 'NOT EXISTS'
+            ),
+            array(
+                'key' => '_yoast_wpseo_meta-robots-noindex',
+                'value' => '1',
+                'compare' => '!='
+            )
+        )
     );
 
     $query = new WP_Query($args);
 
     echo '<table class="wp-list-table widefat fixed striped">';
-    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Rendered SEO Title</th><th>Title Length</th><th>Update Title</th><th>Index Status</th></tr></thead><tbody>';
+    echo '<thead><tr><th>ID</th><th>Post Type</th><th>Rendered SEO Title</th><th>Title Length</th><th>Update Title</th></tr></thead><tbody>';
 
     while ($query->have_posts()) {
         $query->the_post();
@@ -263,10 +291,6 @@ function astute_tech_seo_helper_title_checker() {
         $rendered_title = str_replace('%', '', $rendered_title);
         $title_length = strlen($rendered_title);
 
-        // Get indexing status
-        $robots = get_post_meta($post_id, '_yoast_wpseo_meta-robots-noindex', true);
-        $index_status = ($robots === '1') ? 'No-Index' : 'Indexed';
-
         if ($title_length < 50 || $title_length > 60) {
             echo '<tr>';
             echo '<td><a href="' . esc_url(get_edit_post_link($post_id)) . '" target="_blank">' . esc_html($post_id) . '</a></td>';
@@ -274,7 +298,6 @@ function astute_tech_seo_helper_title_checker() {
             echo '<td><input type="text" class="update-title" data-post-id="' . esc_attr($post_id) . '" value="' . esc_attr($rendered_title) . '" /></td>';
             echo '<td>' . esc_html($title_length) . '</td>';
             echo '<td><span class="update-title-length" data-post-id="' . esc_attr($post_id) . '">' . esc_html($title_length) . '</span></td>';
-            echo '<td>' . esc_html($index_status) . '</td>';
             echo '</tr>';
         }
     }
